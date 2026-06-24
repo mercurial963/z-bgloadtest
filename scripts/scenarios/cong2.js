@@ -85,7 +85,7 @@ export function conG2Flow(token, config) {
     const t1Rec = t1.status === 200 ? firstRecord(t1.json()) : null;
     const t1Id = pickOrWarn(
       t1Rec,
-      ['id', 'payInstalmentRequestId', 'requestId'],
+      ['instalmentsReqId', 'id', 'payInstalmentRequestId', 'requestId'],
       'CON-G2 step 2 pay-instalment-requests/{id} (tab1 id)'
     );
 
@@ -107,7 +107,7 @@ export function conG2Flow(token, config) {
     const t2Rec = t2.status === 200 ? firstRecord(t2.json()) : null;
     const t2Id = pickOrWarn(
       t2Rec,
-      ['id', 'payInstalmentRequestId', 'requestId'],
+      ['instalmentsReqId', 'id', 'payInstalmentRequestId', 'requestId'],
       'CON-G2 step 4 pay-instalment-requests/{id} (tab2 id)'
     );
 
