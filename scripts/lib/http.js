@@ -90,12 +90,37 @@ export function makeSteps({ token, label, tagPrefix, host, trend }) {
     headers: { Authorization: `Bearer ${token}` },
   };
 
+  // Detect a request that failed at the transport layer (DNS, connection
+  // refused, TLS handshake, timeout). Such a response has res.error set,
+  // status 0, and a null body — calling r.json() on it throws an opaque
+  // GoError that aborts the whole iteration. Mirror auth.js: log a readable
+  // warning, register a FAILED check so it surfaces in the k6 summary, and
+  // return WITHOUT touching the body so the iteration continues. Returns true
+  // when the response is a transport failure (caller should bail early).
+  function guardFailed(res, stepLabel, url) {
+    if (res.error_code || res.error || res.status === 0 || res.body === null) {
+      const reason = res.error || `HTTP ${res.status}` || 'unknown error';
+      console.warn(
+        `[${label}] ${stepLabel} request failed: ${reason} ` +
+          `(url=${url} status=${res.status} error_code=${res.error_code || 0})`
+      );
+      check(res, {
+        [`[${label}] ${stepLabel} request succeeded (transport)`]: () => false,
+      });
+      return true;
+    }
+    return false;
+  }
+
   function postStep(n, path, body) {
     const res = http.post(`${host}${path}`, JSON.stringify(body), {
       headers,
       tags: { name: `${tagPrefix} ${n} ${path}` },
     });
     trend.add(res.timings.duration);
+    if (guardFailed(res, `${n} ${path}`, `${host}${path}`)) {
+      return res;
+    }
     check(res, {
       [`[${label}] ${n} ${path} status 200`]: (r) => r.status === 200,
       [`[${label}] ${n} ${path} valid JSON`]: (r) => r.json() !== null,
@@ -109,6 +134,9 @@ export function makeSteps({ token, label, tagPrefix, host, trend }) {
       tags: { name: `${tagPrefix} ${n} ${stepLabel}` },
     });
     trend.add(res.timings.duration);
+    if (guardFailed(res, `${n} ${stepLabel}`, `${host}${urlSuffix}`)) {
+      return res;
+    }
     check(res, {
       [`[${label}] ${n} ${stepLabel} status 200`]: (r) => r.status === 200,
       [`[${label}] ${n} ${stepLabel} valid JSON`]: (r) => r.json() !== null,

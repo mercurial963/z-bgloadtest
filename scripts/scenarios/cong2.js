@@ -163,33 +163,40 @@ export function conG2Flow(token, config) {
     // 9-11. บันทึกแบบแสดงค่าจ้าง — list -> report -> create-invoice-init (all GET/list).
     //    SKIPPED: hire-report/create-invoice (POST), generate-pdf (POST), and
     //    invoices/hire-report/invoice/{id} (GET, depends on a created invoice).
-    sleep(1);
-    const hr = postStep(9, '/coninvoice/invoices/hire-report/list', {
-      accountNoBegins: '',
-      accountNoEnd: '',
-      ssoBranchCode: '',
-      accountBranch: '',
-      year: '2568',
-      pagination: { pageNumber: 0, pageSize: 10 },
-    });
-    const hrRec = hr.status === 200 ? firstRecord(hr.json()) : null;
-    const hireReportId = pickOrWarn(
-      hrRec,
-      ['hireReportId', 'id', 'invoiceId'],
-      'CON-G2 steps 10-11 hire-report/{id} (hireReportId)'
-    );
-    if (!hireReportId) {
-      console.warn('[CON-G2] step 9 hire-report/list empty — skipping steps 10-11.');
-    } else {
-      sleep(1);
-      getStep(10, `/coninvoice/invoices/hire-report/report/${hireReportId}`, 'hire-report/report/{id}');
-      sleep(1);
-      getStep(
-        11,
-        `/coninvoice/invoices/hire-report/create-invoice-init?hireReportId=${hireReportId}`,
-        'hire-report/create-invoice-init'
-      );
-    }
+    // REMOVED FROM LOAD BASKET (2026-06-24): hire-report runs a full-year unscoped
+    // query (all account filters empty) and times out ~90s on prod. Faithful to the
+    // Postman source, but too slow/heavy to load test. Flagged for SSO team: needs an
+    // account filter or an index. Re-enable only for a single-user functional check.
+    //
+    // Steps 10-11 consume hireReportId from step 9's response, so the whole chain
+    // (POST list + id extraction + both dependent GETs) is disabled together.
+    // sleep(1);
+    // const hr = postStep(9, '/coninvoice/invoices/hire-report/list', {
+    //   accountNoBegins: '',
+    //   accountNoEnd: '',
+    //   ssoBranchCode: '',
+    //   accountBranch: '',
+    //   year: '2568',
+    //   pagination: { pageNumber: 0, pageSize: 10 },
+    // });
+    // const hrRec = hr.status === 200 ? firstRecord(hr.json()) : null;
+    // const hireReportId = pickOrWarn(
+    //   hrRec,
+    //   ['hireReportId', 'id', 'invoiceId'],
+    //   'CON-G2 steps 10-11 hire-report/{id} (hireReportId)'
+    // );
+    // if (!hireReportId) {
+    //   console.warn('[CON-G2] step 9 hire-report/list empty — skipping steps 10-11.');
+    // } else {
+    //   sleep(1);
+    //   getStep(10, `/coninvoice/invoices/hire-report/report/${hireReportId}`, 'hire-report/report/{id}');
+    //   sleep(1);
+    //   getStep(
+    //     11,
+    //     `/coninvoice/invoices/hire-report/create-invoice-init?hireReportId=${hireReportId}`,
+    //     'hire-report/create-invoice-init'
+    //   );
+    // }
 
     // 12-14. ออกใบแจ้งจากตรวจสอบบัญชี — list -> balance -> detail.
     //    SKIPPED: contribution-audits save (POST), generate-pdf (POST).
