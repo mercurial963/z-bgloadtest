@@ -93,3 +93,25 @@ export const config = {
   VUS: Number(__ENV.VUS),
   ITERATIONS: Number(__ENV.ITERATIONS),
 };
+
+// ---------------------------------------------------------------------------
+// Shared TLS options for the prod entrypoints.
+// Prod serves a cert signed by an internal CA (SSO_CA, not in any public trust
+// store), so insecureSkipTLSVerify accepts the internal SSO_CA cert. We PIN
+// TLS 1.2 (min AND max both tls1.2) and supply an explicit TLS 1.2 cipher list
+// so Go negotiates a cipher the server accepts rather than failing with
+// `tls: server chose an unconfigured cipher suite`.
+// Host pinning is NOT here — it stays in scripts/config.json (passed via
+// --config config.json), which pins both wcf.sso.go.th and wcfapi.sso.go.th.
+// Spread into each entrypoint's exported `options`.
+// ---------------------------------------------------------------------------
+export const tlsOptions = {
+  insecureSkipTLSVerify: true,
+  tlsVersion: { min: 'tls1.2', max: 'tls1.2' },
+  tlsCipherSuites: [
+    'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384',
+    'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256',
+    'TLS_RSA_WITH_AES_256_GCM_SHA384',
+    'TLS_RSA_WITH_AES_128_GCM_SHA256',
+  ],
+};

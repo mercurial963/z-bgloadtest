@@ -26,7 +26,7 @@
 
 // config.js FIRST — importing it runs the required-var guard at module init,
 // before k6 evaluates `export const options`. Do not reorder these imports.
-import { config } from './lib/config.js';
+import { config, tlsOptions } from './lib/config.js';
 import { sleep } from 'k6';
 import { authenticate } from './lib/auth.js';
 import { regFlow } from './scenarios/reg.js';
@@ -39,6 +39,7 @@ import { conG2Flow } from './scenarios/cong2.js';
 // the guard has already thrown. No `|| fallback`.
 // ---------------------------------------------------------------------------
 export const options = {
+  ...tlsOptions,
   vus: config.VUS,
   iterations: config.ITERATIONS,
   thresholds: {

@@ -34,13 +34,14 @@
  */
 
 // config.js FIRST — importing it runs the required-var guard at module init.
-import { config } from './lib/config.js';
+import { config, tlsOptions } from './lib/config.js';
 import http from 'k6/http';
 import { authenticate } from './lib/auth.js';
 import { firstRecord } from './lib/http.js';
 
 // Minimal single-shot profile — this is discovery, not load.
 export const options = {
+  ...tlsOptions,
   vus: 1,
   iterations: 1,
 };
