@@ -67,7 +67,7 @@ export const config = {
   HOST,
 
   // Auth: HTTP Basic client credentials + password grant.
-  AUTH_BASE: `${HOST}/ips/api`,
+  AUTH_BASE: `${HOST}`,
   CLIENT_ID: __ENV.CLIENT_ID,
   CLIENT_SECRET: __ENV.CLIENT_SECRET,
 

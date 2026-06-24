@@ -39,7 +39,7 @@ const list = (records) => ({ content: records, totalElements: records.length });
 
 function route(method, pathname) {
   // ---- AUTH ----
-  if (method === 'POST' && pathname === '/ips/api/auth/user/token') {
+  if (method === 'POST' && pathname === '/auth/user/token') {
     return {
       access_token: 'mock-token-123',
       token_type: 'bearer',
