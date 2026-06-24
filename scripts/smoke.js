@@ -31,6 +31,7 @@ import { sleep } from 'k6';
 import { authenticate } from './lib/auth.js';
 import { regFlow } from './scenarios/reg.js';
 import { conG2Flow } from './scenarios/cong2.js';
+import { g0Flow } from './scenarios/g0.js';
 
 // ---------------------------------------------------------------------------
 // Options — smoke profile + baseline thresholds.
@@ -49,6 +50,7 @@ export const options = {
     // Per-domain visibility.
     reg_req_duration: ['p(95)<3000'],
     cong2_req_duration: ['p(95)<3000'],
+    g0_req_duration: ['p(95)<3000'],
   },
 };
 
@@ -68,5 +70,7 @@ export default function (data) {
   regFlow(data.regToken, config);
   sleep(1);
   conG2Flow(data.conG2Token, config);
+  sleep(1);
+  g0Flow(data.regToken, config);
   sleep(1);
 }

@@ -123,6 +123,17 @@ function route(method, pathname) {
     return { invoiceId: 'should-not-be-hit', note: 'step19 should have skipped' };
   }
 
+  // ---- G0 (home-page burst: independent reference reads, no chaining) ----
+  if (method === 'GET' && pathname === '/ums/users/profile') {
+    return { userId: 'mock-user-1', username: 'REG003001', displayName: 'MOCK USER' };
+  }
+  if (method === 'GET' && pathname === '/nms/notifications') {
+    return list([{ id: 'NOTI-1', status: 'N', message: 'mock notification' }]);
+  }
+  if (method === 'GET' && pathname === '/ums/users/page-accesses') {
+    return list([{ pageCode: 'HOME', canView: true }, { pageCode: 'REG', canView: true }]);
+  }
+
   return undefined; // 404
 }
 
