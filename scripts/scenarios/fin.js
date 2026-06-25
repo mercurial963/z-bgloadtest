@@ -132,16 +132,15 @@ export function finFlow(token, config) {
         );
 
         // 6. (R) edit receipt detail. receiptId chained from step 5.
-        //    VERB FLAG: user.md specifies POST here; the v2 Postman collection
-        //    shows this as GET. Built as POST per user.md — confirm the real
-        //    verb in the smoke run.
+        //    VERB FLAG: user.md specified POST, but the v2 Postman collection
+        //    shows GET. Smoke run resolved this to GET; settled, see step 4.
         if (!editReceiptId) {
           console.warn(
             `[FIN-${branch}] step 5 edit/receipt/list empty — skipping step 6 detail.`
           );
         } else {
           sleep(1);
-          postStep(6, `/fin/edit/receipt/${editReceiptId}`, {});
+          getStep(6, `/fin/edit/receipt/${editReceiptId}`, 'edit/receipt/{receiptId}');
         }
 
         // 7. (R) pending approval list. referenceCode reuses the step 3 inquiry
