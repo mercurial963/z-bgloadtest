@@ -34,6 +34,7 @@ import { conG2Flow } from './scenarios/cong2.js';
 import { g0Flow } from './scenarios/g0.js';
 // G3 is parked pending acc-service routing on the gateway (g3.js stays on disk).
 import { finFlow } from './scenarios/fin.js';
+import { cmtFlow } from './scenarios/cmt.js';
 
 // ---------------------------------------------------------------------------
 // Options — smoke profile + baseline thresholds.
@@ -54,6 +55,7 @@ export const options = {
     cong2_req_duration: ['p(95)<3000'],
     g0_req_duration: ['p(95)<3000'],
     fin_req_duration: ['p(95)<3000'],
+    cmt_req_duration: ['p(95)<3000'],
   },
 };
 
@@ -64,7 +66,8 @@ export function setup() {
   const regToken = authenticate(config.REG_USER, config.REG_PASS, 'REG', config);
   const conG2Token = authenticate(config.CONG2_USER, config.CONG2_PASS, 'CON-G2', config);
   const finToken = authenticate(config.FIN_USER, config.FIN_PASS, 'FIN', config);
-  return { regToken, conG2Token, finToken };
+  const cmtToken = authenticate(config.CMT_USER, config.CMT_PASS, 'CMT', config);
+  return { regToken, conG2Token, finToken, cmtToken };
 }
 
 // ---------------------------------------------------------------------------
@@ -78,5 +81,7 @@ export default function (data) {
   g0Flow(data.regToken, config);
   sleep(1);
   finFlow(data.finToken, config);
+  sleep(1);
+  cmtFlow(data.cmtToken, config);
   sleep(1);
 }
