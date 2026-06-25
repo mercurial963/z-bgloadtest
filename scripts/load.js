@@ -47,20 +47,24 @@ import { authenticate } from './lib/auth.js';
 import { regFlow } from './scenarios/reg.js';
 import { conG2Flow } from './scenarios/cong2.js';
 import { g0Flow } from './scenarios/g0.js';
+import { g3Flow } from './scenarios/g3.js';
 
 // ---------------------------------------------------------------------------
 // RATE MATH — weighting is on HTTP REQUESTS, not journeys.
 // =========================================================================
-// The traffic mix is specified per HTTP request: G0 70%, REG 20%, CON-G2 10%.
-// Arrival-rate executors are driven by ITERATIONS (journeys) per second, so we
-// convert each module's request-share into a journey rate by dividing by the
-// real number of HTTP requests one journey of that module fires.
+// The traffic mix is specified per HTTP request: G0 65%, REG 18%, CON-G2 10%,
+// G3 7%. Arrival-rate executors are driven by ITERATIONS (journeys) per second,
+// so we convert each module's request-share into a journey rate by dividing by
+// the real number of HTTP requests one journey of that module fires.
 //
 // requestsPerJourney (counted from the scenario code, healthy/seeded path):
 //   G0     = 3   (3 unconditional GETs in g0Flow)
 //   REG    = 6   (step 1 + chained steps 2-6, all reads)
 //   CON-G2 = 16  (12 unconditional steps + 4 chained detail steps;
 //                 steps 9-11 hire-report are commented out of the basket)
+//   G3     = 33  (33 read-only steps on the healthy/seeded path: searches,
+//                 chained detail/history calls, and 12 report-fetch POSTs;
+//                 the commented write steps are not counted)
 //
 // We compute TWO tiers per module from the two total-req/s knobs:
 //   warmRate = Math.max(1, Math.round(LOW_RPS  * weight / requestsPerJourney))
@@ -70,15 +74,18 @@ import { g0Flow } from './scenarios/g0.js';
 //
 // At the defaults (LOW_RPS = 100, HIGH_RPS = 400) this yields:
 //   warm-up tier (LOW_RPS = 100 total req/s):
-//     G0     : 100 * 0.70 =  70 req/s ;  70 / 3  = 23.33 -> 23 journeys/s
-//     REG    : 100 * 0.20 =  20 req/s ;  20 / 6  =  3.33 ->  3 journeys/s
+//     G0     : 100 * 0.65 =  65 req/s ;  65 / 3  = 21.67 -> 22 journeys/s
+//     REG    : 100 * 0.18 =  18 req/s ;  18 / 6  =  3.0  ->  3 journeys/s
 //     CON-G2 : 100 * 0.10 =  10 req/s ;  10 / 16 =  0.625 -> 1 journeys/s (floored)
+//     G3     : 100 * 0.07 =   7 req/s ;   7 / 33 =  0.21  -> 1 journeys/s (floored)
 //   load tier (HIGH_RPS = 400 total req/s):
-//     G0     : 400 * 0.70 = 280 req/s ; 280 / 3  = 93.33 -> 93 journeys/s
-//     REG    : 400 * 0.20 =  80 req/s ;  80 / 6  = 13.33 -> 13 journeys/s
+//     G0     : 400 * 0.65 = 260 req/s ; 260 / 3  = 86.67 -> 87 journeys/s
+//     REG    : 400 * 0.18 =  72 req/s ;  72 / 6  = 12.0  -> 12 journeys/s
 //     CON-G2 : 400 * 0.10 =  40 req/s ;  40 / 16 =  2.5  ->  3 journeys/s
+//     G3     : 400 * 0.07 =  28 req/s ;  28 / 33 =  0.85  -> 1 journeys/s (floored)
 //
-// Per-scenario stage targets at the defaults: g0 23->93, reg 3->13, cong2 1->3.
+// Per-scenario stage targets at the defaults: g0 22->87, reg 3->12, cong2 1->3,
+// g3 1->1.
 // ---------------------------------------------------------------------------
 
 const LOW_RPS = Number(__ENV.LOW_RPS) || 100;    // warm-up total HTTP req/s
@@ -91,8 +98,8 @@ const LOAD_HOLD = __ENV.LOAD_HOLD || '10m';
 const COOLDOWN = __ENV.COOLDOWN || '3m';
 
 // Module weights (share of total HTTP requests) and real requests-per-journey.
-const WEIGHTS = { g0: 0.70, reg: 0.20, cong2: 0.10 };
-const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16 };
+const WEIGHTS = { g0: 0.65, reg: 0.18, cong2: 0.10, g3: 0.07 };
+const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, g3: 33 };
 
 // journeyRate(module, totalRps): convert this module's request-share at the
 // given total req/s into a journey/s target rate, never rounding to 0.
@@ -107,6 +114,8 @@ const REG_WARM = journeyRate('reg', LOW_RPS);
 const REG_LOAD = journeyRate('reg', HIGH_RPS);
 const CONG2_WARM = journeyRate('cong2', LOW_RPS);
 const CONG2_LOAD = journeyRate('cong2', HIGH_RPS);
+const G3_WARM = journeyRate('g3', LOW_RPS);
+const G3_LOAD = journeyRate('g3', HIGH_RPS);
 
 // ---------------------------------------------------------------------------
 // Scenario functions. Each reads its token off the setup() return passed in as
@@ -122,6 +131,10 @@ export function regScenario(data) {
 
 export function cong2Scenario(data) {
   conG2Flow(data.conG2Token, config);
+}
+
+export function g3Scenario(data) {
+  g3Flow(data.g3Token, config);
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +200,24 @@ export const options = {
         { target: 0, duration: COOLDOWN },
       ],
     },
+    g3: {
+      executor: 'ramping-arrival-rate',
+      exec: 'g3Scenario',
+      startRate: 0,
+      timeUnit: '1s',
+      // G3's journey is the longest of all (33 sequential steps + a sleep
+      // between most), so each iteration runs many seconds. Even at the floored
+      // 1 journey/s many iterations overlap, so it needs a CON-G2-class ceiling.
+      preAllocatedVUs: 30,
+      maxVUs: 150,
+      stages: [
+        { target: G3_WARM, duration: '30s' },
+        { target: G3_WARM, duration: WARMUP_HOLD },
+        { target: G3_LOAD, duration: '1m' },
+        { target: G3_LOAD, duration: LOAD_HOLD },
+        { target: 0, duration: COOLDOWN },
+      ],
+    },
   },
   thresholds: {
     // Go-live SLOs (same metrics as smoke).
@@ -196,6 +227,7 @@ export const options = {
     reg_req_duration: ['p(95)<3000'],
     cong2_req_duration: ['p(95)<3000'],
     g0_req_duration: ['p(95)<3000'],
+    g3_req_duration: ['p(95)<3000'],
   },
 };
 
@@ -206,5 +238,6 @@ export const options = {
 export function setup() {
   const regToken = authenticate(config.REG_USER, config.REG_PASS, 'REG', config);
   const conG2Token = authenticate(config.CONG2_USER, config.CONG2_PASS, 'CON-G2', config);
-  return { regToken, conG2Token };
+  const g3Token = authenticate(config.G3_USER, config.G3_PASS, 'G3', config);
+  return { regToken, conG2Token, g3Token };
 }
