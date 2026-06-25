@@ -108,8 +108,8 @@ const HIGH_RPS = Number(__ENV.HIGH_RPS) || 150;  // load total HTTP req/s
 
 // Hold durations (env tunable). The two ramps (30s up, 1m between tiers) stay
 // hardcoded; cool-down is COOLDOWN.
-const WARMUP_HOLD = __ENV.WARMUP_HOLD || '5m';
-const LOAD_HOLD = __ENV.LOAD_HOLD || '25m';
+const WARMUP_HOLD = __ENV.WARMUP_HOLD || '3m';
+const LOAD_HOLD = __ENV.LOAD_HOLD || '5m';
 const COOLDOWN = __ENV.COOLDOWN || '3m';
 
 // Module weights (share of total HTTP requests) and real requests-per-journey.
