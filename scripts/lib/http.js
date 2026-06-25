@@ -112,6 +112,41 @@ export function makeSteps({ token, label, tagPrefix, host, trend }) {
     return false;
   }
 
+  // First ~120 chars of a body, for diagnostics. Bodies can be huge HTML error
+  // pages, so we truncate hard and flatten newlines so the warning stays on one
+  // readable line.
+  function bodyHead(res, max = 120) {
+    const b = res && res.body != null ? String(res.body) : '';
+    const flat = b.replace(/\s+/g, ' ').trim();
+    return flat.length > max ? `${flat.slice(0, max)}…` : flat;
+  }
+
+  // Defensive JSON read. A non-2xx response (404, 500, an HTML error page) or a
+  // 2xx with a non-JSON body (e.g. a '%'-prefixed body) must NOT call r.json()
+  // and abort the iteration with a GoError. Guard on status first, then wrap the
+  // parse: on either failure, warn with label + step + status + truncated body
+  // and return null so firstRecord/pick/pickOrWarn downstream warn-skip the
+  // chained step instead of crashing. Returns the parsed body on the happy path
+  // (2xx + valid JSON), exactly as r.json() would have.
+  function safeJson(res, stepLabel) {
+    if (res.status < 200 || res.status >= 300) {
+      console.warn(
+        `[${label}] ${stepLabel} non-2xx response (status=${res.status}); ` +
+          `skipping json parse. Body head: ${bodyHead(res)}`
+      );
+      return null;
+    }
+    try {
+      return res.json();
+    } catch (e) {
+      console.warn(
+        `[${label}] ${stepLabel} body is not valid JSON (status=${res.status}); ` +
+          `skipping json parse. Body head: ${bodyHead(res)}`
+      );
+      return null;
+    }
+  }
+
   function postStep(n, path, body) {
     const res = http.post(`${host}${path}`, JSON.stringify(body), {
       headers,
@@ -121,9 +156,13 @@ export function makeSteps({ token, label, tagPrefix, host, trend }) {
     if (guardFailed(res, `${n} ${path}`, `${host}${path}`)) {
       return res;
     }
+    // Parse defensively ONCE (non-2xx or non-JSON body -> warn + null, never a
+    // GoError), then assert on the already-parsed value so the check never
+    // re-parses and re-throws.
+    const parsed = safeJson(res, `${n} ${path}`);
     check(res, {
       [`[${label}] ${n} ${path} status 200`]: (r) => r.status === 200,
-      [`[${label}] ${n} ${path} valid JSON`]: (r) => r.json() !== null,
+      [`[${label}] ${n} ${path} valid JSON`]: () => parsed !== null,
     });
     return res;
   }
@@ -137,9 +176,13 @@ export function makeSteps({ token, label, tagPrefix, host, trend }) {
     if (guardFailed(res, `${n} ${stepLabel}`, `${host}${urlSuffix}`)) {
       return res;
     }
+    // Parse defensively ONCE (non-2xx or non-JSON body -> warn + null, never a
+    // GoError), then assert on the already-parsed value so the check never
+    // re-parses and re-throws.
+    const parsed = safeJson(res, `${n} ${stepLabel}`);
     check(res, {
       [`[${label}] ${n} ${stepLabel} status 200`]: (r) => r.status === 200,
-      [`[${label}] ${n} ${stepLabel} valid JSON`]: (r) => r.json() !== null,
+      [`[${label}] ${n} ${stepLabel} valid JSON`]: () => parsed !== null,
     });
     return res;
   }

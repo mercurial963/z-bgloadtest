@@ -4,7 +4,8 @@
  * Target host : https://wcfapi.sso.go.th  (PRODUCTION, pre-go-live)
  *               No live users / no real data at risk. Do NOT point at UAT.
  *
- * Purpose     : Drive the live read-only modules (G0, REG, CON-G2, G3, FIN) in PARALLEL
+ * Purpose     : Drive the live read-only modules (G0, REG, CON-G2, FIN) in PARALLEL
+ *               (G3 is parked pending acc-service routing on the gateway)
  *               under a controlled, weighted request rate to validate the load
  *               harness and capture latency/error SLOs. This is the LOAD test,
  *               separate from smoke.js (which stays a 1-2 VU functional check).
@@ -47,25 +48,25 @@ import { authenticate } from './lib/auth.js';
 import { regFlow } from './scenarios/reg.js';
 import { conG2Flow } from './scenarios/cong2.js';
 import { g0Flow } from './scenarios/g0.js';
-import { g3Flow } from './scenarios/g3.js';
+// G3 is parked pending acc-service routing on the gateway (g3.js stays on disk).
 import { finFlow } from './scenarios/fin.js';
 
 // ---------------------------------------------------------------------------
 // RATE MATH — weighting is on HTTP REQUESTS, not journeys.
 // =========================================================================
-// The traffic mix is specified per HTTP request: G0 60%, REG 17%, CON-G2 9%,
-// G3 7%, FIN 7%. Arrival-rate executors are driven by ITERATIONS (journeys) per
-// second, so we convert each module's request-share into a journey rate by
-// dividing by the real number of HTTP requests one journey of that module fires.
+// The traffic mix is specified per HTTP request across the four live modules:
+// G0 65%, REG 18%, CON-G2 10%, FIN 7%. (G3 is parked pending acc-service routing
+// on the gateway; its old 7% share was dropped and the remaining four were
+// renormalized to sum to 1.0, keeping G0 dominant.) Arrival-rate executors are
+// driven by ITERATIONS (journeys) per second, so we convert each module's
+// request-share into a journey rate by dividing by the real number of HTTP
+// requests one journey of that module fires.
 //
 // requestsPerJourney (counted from the scenario code, healthy/seeded path):
 //   G0     = 3   (3 unconditional GETs in g0Flow)
 //   REG    = 6   (step 1 + chained steps 2-6, all reads)
 //   CON-G2 = 16  (12 unconditional steps + 4 chained detail steps;
 //                 steps 9-11 hire-report are commented out of the basket)
-//   G3     = 33  (33 read-only steps on the healthy/seeded path: searches,
-//                 chained detail/history calls, and 12 report-fetch POSTs;
-//                 the commented write steps are not counted)
 //   FIN    = 14  (7 read-only steps x 2 branches: two searches, an inquiry
 //                 list + chained detail, an edit list + chained detail, and a
 //                 pending-approval list; the parked write steps are not counted)
@@ -78,31 +79,28 @@ import { finFlow } from './scenarios/fin.js';
 //
 // At the defaults (LOW_RPS = 100, HIGH_RPS = 150) this yields:
 //   warm-up tier (LOW_RPS = 100 total req/s):
-//     G0     : 100 * 0.60 =  60 req/s ;  60 / 3  = 20.0  -> 20 journeys/s
-//     REG    : 100 * 0.17 =  17 req/s ;  17 / 6  =  2.83 ->  3 journeys/s
-//     CON-G2 : 100 * 0.09 =   9 req/s ;   9 / 16 =  0.56 ->  1 journeys/s (floored)
-//     G3     : 100 * 0.07 =   7 req/s ;   7 / 33 =  0.21 ->  1 journeys/s (floored)
-//     FIN    : 100 * 0.07 =   7 req/s ;   7 / 14 =  0.50 ->  1 journeys/s (floored)
+//     G0     : 100 * 0.65 =  65.0 req/s ;  65.0 / 3  = 21.67 -> 22 journeys/s
+//     REG    : 100 * 0.18 =  18.0 req/s ;  18.0 / 6  =  3.00 ->  3 journeys/s
+//     CON-G2 : 100 * 0.10 =  10.0 req/s ;  10.0 / 16 =  0.62 ->  1 journeys/s (floored)
+//     FIN    : 100 * 0.07 =   7.0 req/s ;   7.0 / 14 =  0.50 ->  1 journeys/s (floored)
 //   load tier (HIGH_RPS = 150 total req/s):
-//     G0     : 150 * 0.60 =  90.0 req/s ;  90.0 / 3  = 30.00 -> 30 journeys/s
-//     REG    : 150 * 0.17 =  25.5 req/s ;  25.5 / 6  =  4.25 ->  4 journeys/s
-//     CON-G2 : 150 * 0.09 =  13.5 req/s ;  13.5 / 16 =  0.84 ->  1 journeys/s (floored)
-//     G3     : 150 * 0.07 =  10.5 req/s ;  10.5 / 33 =  0.32 ->  1 journeys/s (floored)
+//     G0     : 150 * 0.65 =  97.5 req/s ;  97.5 / 3  = 32.50 -> 32 journeys/s
+//     REG    : 150 * 0.18 =  27.0 req/s ;  27.0 / 6  =  4.50 ->  4 journeys/s
+//     CON-G2 : 150 * 0.10 =  15.0 req/s ;  15.0 / 16 =  0.94 ->  1 journeys/s (floored)
 //     FIN    : 150 * 0.07 =  10.5 req/s ;  10.5 / 14 =  0.75 ->  1 journeys/s (floored)
 //
-// Per-scenario stage targets at the defaults: g0 20->30, reg 3->4, cong2 1->1,
-// g3 1->1, fin 1->1.
+// Per-scenario stage targets at the defaults: g0 22->32, reg 3->4, cong2 1->1,
+// fin 1->1.
 //
-// FLOOR SKEW at the 150 load tier: g3 and fin (and cong2) all floor to 1 j/s.
-// Because g3/fin/cong2 fire many requests per journey, their floored actual
-// req/s exceeds their weighted share at this lower total target:
-//   CON-G2 floored 1 j/s -> 16 req/s actual vs 13.5 weighted ( 9% -> ~10.7%)
-//   G3     floored 1 j/s -> 33 req/s actual vs 10.5 weighted ( 7% -> ~22%)
+// FLOOR SKEW at the 150 load tier: cong2 and fin both floor to 1 j/s. Because
+// they fire many requests per journey, their floored actual req/s differs from
+// their weighted share:
+//   CON-G2 floored 1 j/s -> 16 req/s actual vs 15.0 weighted (10% -> ~10.7%)
 //   FIN    floored 1 j/s -> 14 req/s actual vs 10.5 weighted ( 7% -> ~9.3%)
-// G3 is the big skew: its 1-journey floor alone fires 33 req/s, so the realized
-// total is ~177 req/s (not 150) and G3's true share balloons to ~22%. This is
-// the same floor effect noted at 400; it is just more pronounced at 150 because
-// the long-journey modules cannot ramp below their single-journey cost.
+// G0 (32 j/s) rounds to 96 req/s actual (vs 97.5 weighted) and REG (4 j/s) to
+// 24 req/s actual (vs 27.0 weighted). The realized total at the 150 load tier is
+// therefore 96 + 24 + 16 + 14 = 150 req/s. With G3 gone the big floor skew is
+// removed; the residual difference is just rounding plus the cong2/fin floor.
 // ---------------------------------------------------------------------------
 
 const LOW_RPS = Number(__ENV.LOW_RPS) || 100;    // warm-up total HTTP req/s
@@ -115,11 +113,11 @@ const LOAD_HOLD = __ENV.LOAD_HOLD || '25m';
 const COOLDOWN = __ENV.COOLDOWN || '3m';
 
 // Module weights (share of total HTTP requests) and real requests-per-journey.
-// FIN joined the live basket (read-only, 7 read steps x 2 branches = 14 reqs).
-// It takes a modest 0.07 slice; g0 keeps its dominant share and the rest were
-// renormalized proportionally (x0.93) so the weights still sum to 1.0.
-const WEIGHTS = { g0: 0.60, reg: 0.17, cong2: 0.09, g3: 0.07, fin: 0.07 };
-const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, g3: 33, fin: 14 };
+// G3 is parked pending acc-service routing on the gateway; its 0.07 slice was
+// dropped and the remaining four modules renormalized to sum to 1.0, keeping g0
+// dominant. FIN stays read-only (7 read steps x 2 branches = 14 reqs).
+const WEIGHTS = { g0: 0.65, reg: 0.18, cong2: 0.10, fin: 0.07 };
+const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, fin: 14 };
 
 // journeyRate(module, totalRps): convert this module's request-share at the
 // given total req/s into a journey/s target rate, never rounding to 0.
@@ -134,8 +132,6 @@ const REG_WARM = journeyRate('reg', LOW_RPS);
 const REG_LOAD = journeyRate('reg', HIGH_RPS);
 const CONG2_WARM = journeyRate('cong2', LOW_RPS);
 const CONG2_LOAD = journeyRate('cong2', HIGH_RPS);
-const G3_WARM = journeyRate('g3', LOW_RPS);
-const G3_LOAD = journeyRate('g3', HIGH_RPS);
 const FIN_WARM = journeyRate('fin', LOW_RPS);
 const FIN_LOAD = journeyRate('fin', HIGH_RPS);
 
@@ -153,10 +149,6 @@ export function regScenario(data) {
 
 export function cong2Scenario(data) {
   conG2Flow(data.conG2Token, config);
-}
-
-export function g3Scenario(data) {
-  g3Flow(data.g3Token, config);
 }
 
 export function finScenario(data) {
@@ -230,24 +222,6 @@ export const options = {
         { target: 0, duration: COOLDOWN },
       ],
     },
-    g3: {
-      executor: 'ramping-arrival-rate',
-      exec: 'g3Scenario',
-      startRate: 0,
-      timeUnit: '1s',
-      // G3's journey is the longest of all (33 sequential steps + a sleep
-      // between most), so each iteration runs many seconds. Even at the floored
-      // 1 journey/s many iterations overlap, so it needs a CON-G2-class ceiling.
-      preAllocatedVUs: 30,
-      maxVUs: 150,
-      stages: [
-        { target: G3_WARM, duration: '30s' },
-        { target: G3_WARM, duration: WARMUP_HOLD },
-        { target: G3_LOAD, duration: '1m' },
-        { target: G3_LOAD, duration: LOAD_HOLD },
-        { target: 0, duration: COOLDOWN },
-      ],
-    },
     fin: {
       executor: 'ramping-arrival-rate',
       exec: 'finScenario',
@@ -276,7 +250,6 @@ export const options = {
     reg_req_duration: ['p(95)<3000'],
     cong2_req_duration: ['p(95)<3000'],
     g0_req_duration: ['p(95)<3000'],
-    g3_req_duration: ['p(95)<3000'],
     fin_req_duration: ['p(95)<3000'],
   },
 };
@@ -288,7 +261,6 @@ export const options = {
 export function setup() {
   const regToken = authenticate(config.REG_USER, config.REG_PASS, 'REG', config);
   const conG2Token = authenticate(config.CONG2_USER, config.CONG2_PASS, 'CON-G2', config);
-  const g3Token = authenticate(config.G3_USER, config.G3_PASS, 'G3', config);
   const finToken = authenticate(config.FIN_USER, config.FIN_PASS, 'FIN', config);
-  return { regToken, conG2Token, g3Token, finToken };
+  return { regToken, conG2Token, finToken };
 }
