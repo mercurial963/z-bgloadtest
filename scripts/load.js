@@ -50,6 +50,7 @@ import { conG2Flow } from './scenarios/cong2.js';
 import { g0Flow } from './scenarios/g0.js';
 // G3 is parked pending acc-service routing on the gateway (g3.js stays on disk).
 import { finFlow } from './scenarios/fin.js';
+import { cmtFlow } from './scenarios/cmt.js';
 
 // ---------------------------------------------------------------------------
 // RATE MATH — weighting is on HTTP REQUESTS, not journeys.
@@ -116,8 +117,13 @@ const COOLDOWN = __ENV.COOLDOWN || '3m';
 // G3 is parked pending acc-service routing on the gateway; its 0.07 slice was
 // dropped and the remaining four modules renormalized to sum to 1.0, keeping g0
 // dominant. FIN stays read-only (7 read steps x 2 branches = 14 reqs).
-const WEIGHTS = { g0: 0.65, reg: 0.18, cong2: 0.10, fin: 0.07 };
-const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, fin: 14 };
+// CMT is a read-only search-then-detail basket (8 read steps in cmt.js), wired
+// at FIN's floor weight (0.07). At both tiers its share floors to 1 journey/s,
+// exactly like FIN (100*0.07/8 = 0.88 -> 1 ; 150*0.07/8 = 1.31 -> 1). CMT's
+// 1 journey/s is taken out of G0's slice below so the per-tier basket total is
+// unchanged (G0 22->32 becomes 21->31); REG, CON-G2, and FIN are untouched.
+const WEIGHTS = { g0: 0.65, reg: 0.18, cong2: 0.10, fin: 0.07, cmt: 0.07 };
+const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, fin: 14, cmt: 8 };
 
 // journeyRate(module, totalRps): convert this module's request-share at the
 // given total req/s into a journey/s target rate, never rounding to 0.
@@ -126,14 +132,18 @@ function journeyRate(module, totalRps) {
   return Math.max(1, Math.round(requestShare / REQS_PER_JOURNEY[module]));
 }
 
-const G0_WARM = journeyRate('g0', LOW_RPS);
-const G0_LOAD = journeyRate('g0', HIGH_RPS);
 const REG_WARM = journeyRate('reg', LOW_RPS);
 const REG_LOAD = journeyRate('reg', HIGH_RPS);
 const CONG2_WARM = journeyRate('cong2', LOW_RPS);
 const CONG2_LOAD = journeyRate('cong2', HIGH_RPS);
 const FIN_WARM = journeyRate('fin', LOW_RPS);
 const FIN_LOAD = journeyRate('fin', HIGH_RPS);
+const CMT_WARM = journeyRate('cmt', LOW_RPS);
+const CMT_LOAD = journeyRate('cmt', HIGH_RPS);
+// G0 absorbs CMT's journey rate so the per-tier basket total stays unchanged:
+// CMT takes the 1 journey/s that was G0's (G0 22->32 becomes 21->31).
+const G0_WARM = journeyRate('g0', LOW_RPS) - CMT_WARM;
+const G0_LOAD = journeyRate('g0', HIGH_RPS) - CMT_LOAD;
 
 // ---------------------------------------------------------------------------
 // Scenario functions. Each reads its token off the setup() return passed in as
@@ -153,6 +163,10 @@ export function cong2Scenario(data) {
 
 export function finScenario(data) {
   finFlow(data.finToken, config);
+}
+
+export function cmtScenario(data) {
+  cmtFlow(data.cmtToken, config);
 }
 
 // ---------------------------------------------------------------------------
@@ -241,6 +255,24 @@ export const options = {
         { target: 0, duration: COOLDOWN },
       ],
     },
+    cmt: {
+      executor: 'ramping-arrival-rate',
+      exec: 'cmtScenario',
+      startRate: 0,
+      timeUnit: '1s',
+      // CMT's read journey runs 8 search/detail steps with a sleep between
+      // most, so each iteration runs several seconds. Even at the floored
+      // journey rate many iterations overlap, so it needs a FIN-class ceiling.
+      preAllocatedVUs: 30,
+      maxVUs: 150,
+      stages: [
+        { target: CMT_WARM, duration: '30s' },
+        { target: CMT_WARM, duration: WARMUP_HOLD },
+        { target: CMT_LOAD, duration: '1m' },
+        { target: CMT_LOAD, duration: LOAD_HOLD },
+        { target: 0, duration: COOLDOWN },
+      ],
+    },
   },
   thresholds: {
     // Go-live SLOs (same metrics as smoke).
@@ -251,6 +283,7 @@ export const options = {
     cong2_req_duration: ['p(95)<3000'],
     g0_req_duration: ['p(95)<3000'],
     fin_req_duration: ['p(95)<3000'],
+    cmt_req_duration: ['p(95)<3000'],
   },
 };
 
@@ -262,5 +295,6 @@ export function setup() {
   const regToken = authenticate(config.REG_USER, config.REG_PASS, 'REG', config);
   const conG2Token = authenticate(config.CONG2_USER, config.CONG2_PASS, 'CON-G2', config);
   const finToken = authenticate(config.FIN_USER, config.FIN_PASS, 'FIN', config);
-  return { regToken, conG2Token, finToken };
+  const cmtToken = authenticate(config.CMT_USER, config.CMT_PASS, 'CMT', config);
+  return { regToken, conG2Token, finToken, cmtToken };
 }
