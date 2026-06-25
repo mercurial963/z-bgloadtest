@@ -33,6 +33,7 @@ import { regFlow } from './scenarios/reg.js';
 import { conG2Flow } from './scenarios/cong2.js';
 import { g0Flow } from './scenarios/g0.js';
 import { g3Flow } from './scenarios/g3.js';
+import { finFlow } from './scenarios/fin.js';
 
 // ---------------------------------------------------------------------------
 // Options — smoke profile + baseline thresholds.
@@ -53,6 +54,7 @@ export const options = {
     cong2_req_duration: ['p(95)<3000'],
     g0_req_duration: ['p(95)<3000'],
     g3_req_duration: ['p(95)<3000'],
+    fin_req_duration: ['p(95)<3000'],
   },
 };
 
@@ -63,7 +65,8 @@ export function setup() {
   const regToken = authenticate(config.REG_USER, config.REG_PASS, 'REG', config);
   const conG2Token = authenticate(config.CONG2_USER, config.CONG2_PASS, 'CON-G2', config);
   const g3Token = authenticate(config.G3_USER, config.G3_PASS, 'G3', config);
-  return { regToken, conG2Token, g3Token };
+  const finToken = authenticate(config.FIN_USER, config.FIN_PASS, 'FIN', config);
+  return { regToken, conG2Token, g3Token, finToken };
 }
 
 // ---------------------------------------------------------------------------
@@ -77,5 +80,7 @@ export default function (data) {
   g0Flow(data.regToken, config);
   sleep(1);
   g3Flow(data.g3Token, config);
+  sleep(1);
+  finFlow(data.finToken, config);
   sleep(1);
 }

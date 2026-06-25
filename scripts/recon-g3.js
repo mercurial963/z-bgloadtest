@@ -103,7 +103,7 @@ export default function (data) {
   probe(
     'G3 /account-profile (search by accountProfileCode)',
     data.g3Token,
-    '/account-profile?accountProfileCode=11100000'
+    '/acc/api/account-profile?accountProfileCode=11100000'
   );
 
   // ---- account-item search (รหัสรายการ) -------------------------------
@@ -114,7 +114,7 @@ export default function (data) {
   probe(
     'G3 /account-item (search ADJO)',
     data.g3Token,
-    '/account-item?accountItemCode=ADJO&accountItemName=&accountLedgerType=&itemGroup=&page=0&size=20&sort=string&sort=ASC'
+    '/acc/api/account-item?accountItemCode=ADJO&accountItemName=&accountLedgerType=&itemGroup=&page=0&size=20&sort=string&sort=ASC'
   );
 
   // ---- remain-balance passbook lookups (บัตรบัญชีนายจ้าง) -------------
@@ -128,7 +128,7 @@ export default function (data) {
   probe(
     'G3 /remain-balance/passbook (by accountNo)',
     data.g3Token,
-    '/remain-balance/passbook?accountBranch=000000&accountNo=1000244105&page=0&size=20&sort=ASC'
+    '/acc/api/remain-balance/passbook?accountBranch=000000&accountNo=1000244105&page=0&size=20&sort=ASC'
   );
 
   // g3.js step 10 — passbook-list by accountNo. Verifies the literal
@@ -137,6 +137,6 @@ export default function (data) {
   probe(
     'G3 /remain-balance/passbook-list (by accountNo)',
     data.g3Token,
-    '/remain-balance/passbook-list?accountBranch=000000&accountNo=2000233104&yearCon=2&page=0&size=20'
+    '/acc/api/remain-balance/passbook-list?accountBranch=000000&accountNo=2000233104&yearCon=2&page=0&size=20'
   );
 }
