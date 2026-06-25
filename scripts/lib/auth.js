@@ -22,7 +22,12 @@ export function authenticate(username, password, label, config) {
     `&password=${encodeURIComponent(password)}`;
 
   const res = http.post(url, null, {
-    headers: { Authorization: `Basic ${basic}` },
+    headers: {
+      Authorization: `Basic ${basic}`,
+      // Ask the server for a 6-hour token (21600s), its maximum TTL, so tokens
+      // do not expire partway through a long load run.
+      'X-Token-Ttl-Seconds': '21600',
+    },
     tags: { name: `auth:${label}` },
   });
 
