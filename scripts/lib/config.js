@@ -29,6 +29,8 @@ const REQUIRED_VARS = [
   'G3_PASS',
   'FIN_USER',
   'FIN_PASS',
+  'CMT_USER',
+  'CMT_PASS',
   'VUS',
   'ITERATIONS',
   'CONG2_BALANCE_ACCOUNT_NO',
@@ -84,6 +86,8 @@ export const config = {
   G3_PASS: __ENV.G3_PASS,
   FIN_USER: __ENV.FIN_USER,
   FIN_PASS: __ENV.FIN_PASS,
+  CMT_USER: __ENV.CMT_USER,
+  CMT_PASS: __ENV.CMT_PASS,
 
   // CON-G2 balance check accountNo + branch. Branch is intentionally allowed empty.
   CONG2_BALANCE_ACCOUNT_NO: __ENV.CONG2_BALANCE_ACCOUNT_NO,
