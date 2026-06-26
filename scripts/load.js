@@ -117,13 +117,14 @@ const COOLDOWN = __ENV.COOLDOWN || '3m';
 // G3 is parked pending acc-service routing on the gateway; its 0.07 slice was
 // dropped and the remaining four modules renormalized to sum to 1.0, keeping g0
 // dominant. FIN stays read-only (7 read steps x 2 branches = 14 reqs).
-// CMP is a read-only search-then-detail basket (8 read steps in cmp.js), wired
+// CMP is a read-only search-then-detail basket (7 active read steps in cmp.js;
+// step 8 searchRemainPayment is parked/commented out and does not run), wired
 // at FIN's floor weight (0.07). At both tiers its share floors to 1 journey/s,
-// exactly like FIN (100*0.07/8 = 0.88 -> 1 ; 150*0.07/8 = 1.31 -> 1). CMP's
+// exactly like FIN (100*0.07/7 = 1.0 -> 1 ; 150*0.07/7 = 1.5 -> 2). CMP's
 // 1 journey/s is taken out of G0's slice below so the per-tier basket total is
 // unchanged (G0 22->32 becomes 21->31); REG, CON-G2, and FIN are untouched.
 const WEIGHTS = { g0: 0.65, reg: 0.18, cong2: 0.10, fin: 0.07, cmp: 0.07 };
-const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, fin: 14, cmp: 8 };
+const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, fin: 14, cmp: 7 };
 
 // journeyRate(module, totalRps): convert this module's request-share at the
 // given total req/s into a journey/s target rate, never rounding to 0.

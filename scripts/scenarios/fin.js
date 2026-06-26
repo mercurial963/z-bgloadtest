@@ -132,8 +132,8 @@ export function finFlow(token, config) {
         );
 
         // 6. (R) edit receipt detail. receiptId chained from step 5.
-        //    VERB FLAG: user.md specified POST, but the v2 Postman collection
-        //    shows GET. Smoke run resolved this to GET; settled, see step 4.
+        //    VERB: GET is the confirmed-correct method (Pao confirmed). The v2
+        //    Postman collection and the smoke run both use GET; settled, see step 4.
         if (!editReceiptId) {
           console.warn(
             `[FIN-${branch}] step 5 edit/receipt/list empty — skipping step 6 detail.`
