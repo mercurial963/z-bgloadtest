@@ -55,7 +55,7 @@ import { conG2Flow } from './scenarios/cong2.js';
 import { g0Flow } from './scenarios/g0.js';
 // G3 is parked pending acc-service routing on the gateway (g3.js stays on disk).
 import { finFlow } from './scenarios/fin.js';
-import { cmtFlow } from './scenarios/cmt.js';
+import { cmpFlow } from './scenarios/cmp.js';
 
 // ---------------------------------------------------------------------------
 // RATE MATH — weighting is on HTTP REQUESTS, not journeys.
@@ -72,7 +72,7 @@ import { cmtFlow } from './scenarios/cmt.js';
 //   REG    = 6   (step 1 + chained steps 2-6, all reads)
 //   CON-G2 = 16  (12 unconditional steps + 4 chained detail steps)
 //   FIN    = 14  (7 read-only steps x 2 branches)
-//   CMT    = 8   (read-only search-then-detail basket)
+//   CMP    = 8   (read-only search-then-detail basket)
 //
 // One journey rate per module, derived from the single steady total req/s knob:
 //   loadRate = Math.max(1, Math.round(RPS * weight / requestsPerJourney))
@@ -85,10 +85,10 @@ import { cmtFlow } from './scenarios/cmt.js';
 //   REG    : 150 * 0.18 =  27.0 req/s ;  27.0 / 6  =  4.50 ->  4 journeys/s
 //   CON-G2 : 150 * 0.10 =  15.0 req/s ;  15.0 / 16 =  0.94 ->  1 journeys/s (floored)
 //   FIN    : 150 * 0.07 =  10.5 req/s ;  10.5 / 14 =  0.75 ->  1 journeys/s (floored)
-//   CMT    : 150 * 0.07 =  10.5 req/s ;  10.5 / 8  =  1.31 ->  1 journeys/s (floored)
-// CMT's 1 journey/s is taken out of G0's slice below (G0 32 -> 31) so the basket
+//   CMP    : 150 * 0.07 =  10.5 req/s ;  10.5 / 8  =  1.31 ->  1 journeys/s (floored)
+// CMP's 1 journey/s is taken out of G0's slice below (G0 32 -> 31) so the basket
 // total is unchanged, exactly as load.js does it. Realized total at the default:
-// G0 93 + REG 24 + CON-G2 16 + FIN 14 + CMT 8 = 155 req/s actual, the same
+// G0 93 + REG 24 + CON-G2 16 + FIN 14 + CMP 8 = 155 req/s actual, the same
 // floor-skewed ~150 the load tier produces.
 // ---------------------------------------------------------------------------
 
@@ -103,9 +103,9 @@ const COOLDOWN = __ENV.COOLDOWN || '5m';
 // Module weights (share of total HTTP requests) and real requests-per-journey —
 // identical to load.js so a soak run is directly comparable to a load run. G3 is
 // parked pending acc-service routing; its 0.07 slice was dropped and the rest
-// renormalized to 1.0. CMT is wired at FIN's floor weight (0.07).
-const WEIGHTS = { g0: 0.65, reg: 0.18, cong2: 0.10, fin: 0.07, cmt: 0.07 };
-const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, fin: 14, cmt: 8 };
+// renormalized to 1.0. CMP is wired at FIN's floor weight (0.07).
+const WEIGHTS = { g0: 0.65, reg: 0.18, cong2: 0.10, fin: 0.07, cmp: 0.07 };
+const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, fin: 14, cmp: 8 };
 
 // journeyRate(module, totalRps): convert this module's request-share at the
 // given total req/s into a journey/s target rate, never rounding to 0.
@@ -117,10 +117,10 @@ function journeyRate(module, totalRps) {
 const REG_RATE = journeyRate('reg', RPS);
 const CONG2_RATE = journeyRate('cong2', RPS);
 const FIN_RATE = journeyRate('fin', RPS);
-const CMT_RATE = journeyRate('cmt', RPS);
-// G0 absorbs CMT's journey rate so the basket total stays unchanged:
-// CMT takes the 1 journey/s that was G0's (G0 32 -> 31).
-const G0_RATE = journeyRate('g0', RPS) - CMT_RATE;
+const CMP_RATE = journeyRate('cmp', RPS);
+// G0 absorbs CMP's journey rate so the basket total stays unchanged:
+// CMP takes the 1 journey/s that was G0's (G0 32 -> 31).
+const G0_RATE = journeyRate('g0', RPS) - CMP_RATE;
 
 // ---------------------------------------------------------------------------
 // Scenario functions. Each reads its token off the setup() return passed in as
@@ -142,8 +142,8 @@ export function finScenario(data) {
   finFlow(data.finToken, config);
 }
 
-export function cmtScenario(data) {
-  cmtFlow(data.cmtToken, config);
+export function cmpScenario(data) {
+  cmpFlow(data.cmpToken, config);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,19 +218,19 @@ export const options = {
         { target: 0, duration: COOLDOWN },
       ],
     },
-    cmt: {
+    cmp: {
       executor: 'ramping-arrival-rate',
-      exec: 'cmtScenario',
+      exec: 'cmpScenario',
       startRate: 0,
       timeUnit: '1s',
-      // CMT's read journey runs 8 search/detail steps with a sleep between
+      // CMP's read journey runs 8 search/detail steps with a sleep between
       // most, so each iteration runs several seconds. Even at the floored
       // journey rate many iterations overlap, so it needs a FIN-class ceiling.
       preAllocatedVUs: 30,
       maxVUs: 150,
       stages: [
-        { target: CMT_RATE, duration: WARMUP },
-        { target: CMT_RATE, duration: LOAD_HOLD },
+        { target: CMP_RATE, duration: WARMUP },
+        { target: CMP_RATE, duration: LOAD_HOLD },
         { target: 0, duration: COOLDOWN },
       ],
     },
@@ -246,13 +246,13 @@ export const options = {
     'http_req_duration{name:auth:REG}': ['p(95)<2000'],
     'http_req_duration{name:auth:CON-G2}': ['p(95)<2000'],
     'http_req_duration{name:auth:FIN}': ['p(95)<2000'],
-    'http_req_duration{name:auth:CMT}': ['p(95)<2000'],
+    'http_req_duration{name:auth:CMP}': ['p(95)<2000'],
     // Per-module visibility (same per-domain metrics as load.js).
     reg_req_duration: ['p(95)<3000'],
     cong2_req_duration: ['p(95)<3000'],
     g0_req_duration: ['p(95)<3000'],
     fin_req_duration: ['p(95)<3000'],
-    cmt_req_duration: ['p(95)<3000'],
+    cmp_req_duration: ['p(95)<3000'],
   },
 };
 
@@ -265,6 +265,6 @@ export function setup() {
   const regToken = authenticate(config.REG_USER, config.REG_PASS, 'REG', config);
   const conG2Token = authenticate(config.CONG2_USER, config.CONG2_PASS, 'CON-G2', config);
   const finToken = authenticate(config.FIN_USER, config.FIN_PASS, 'FIN', config);
-  const cmtToken = authenticate(config.CMT_USER, config.CMT_PASS, 'CMT', config);
-  return { regToken, conG2Token, finToken, cmtToken };
+  const cmpToken = authenticate(config.CMP_USER, config.CMP_PASS, 'CMP', config);
+  return { regToken, conG2Token, finToken, cmpToken };
 }

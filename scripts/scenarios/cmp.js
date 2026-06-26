@@ -1,16 +1,16 @@
 /*
- * cmt.js — CMT (compensation / payment) journey (read-only basket).
+ * cmp.js — CMP (compensation / payment) journey (read-only basket).
  * =========================================================================
- * READ-ONLY only: no write endpoints. The CMT journey is search-then-detail
+ * READ-ONLY only: no write endpoints. The CMP journey is search-then-detail
  * off pre-existing data, exactly like fin.js. Nothing is saved, approved,
  * updated, or deleted. Every save, update, approve, and delete endpoint in the
  * CMP and CMP-Payment collections is deliberately left out; only the search
  * and searchById reads are wired here, matching the smoke.js read-only header
  * invariant.
  *
- * Like FIN, CMT uses its OWN per-module user token (CMT_USER / CMT_PASS),
+ * Like FIN, CMP uses its OWN per-module user token (CMP_USER / CMP_PASS),
  * authenticated ONCE in the caller's setup() and passed in as `token` here —
- * cmtFlow does not re-auth per iteration, mirroring finFlow(token, config).
+ * cmpFlow does not re-auth per iteration, mirroring finFlow(token, config).
  *
  * Chaining (real data wired from prior responses, never a hardcoded id a prior
  * step produces); each downstream detail step is skipped with a console.warn
@@ -29,7 +29,7 @@
  *   8.  POST /cmp/payment/searchRemainPayment           (R)
  *
  * Search bodies (the filter JSON) are copied from the matching requests in
- * Load-test/CMT/CMP.postman_collection.json and CMP-Payment.postman_collection2.json
+ * Load-test/CMP/CMP.postman_collection.json and CMP-Payment.postman_collection2.json
  * so the filters resolve against real data rather than returning nothing.
  * =========================================================================
  */
@@ -38,18 +38,18 @@ import { sleep, group } from 'k6';
 import { Trend } from 'k6/metrics';
 import { firstRecord, pick, pickOrWarn, makeSteps } from '../lib/http.js';
 
-// Per-domain latency metric (so CMT is visible separately from the others).
-const cmtDuration = new Trend('cmt_req_duration', true);
+// Per-domain latency metric (so CMP is visible separately from the others).
+const cmpDuration = new Trend('cmp_req_duration', true);
 
-export function cmtFlow(token, config) {
+export function cmpFlow(token, config) {
   const HOST = config.HOST;
-  group('CMT', function () {
+  group('CMP', function () {
     const { postStep, getStep } = makeSteps({
       token,
-      label: 'CMT',
-      tagPrefix: 'CMT',
+      label: 'CMP',
+      tagPrefix: 'CMP',
       host: HOST,
-      trend: cmtDuration,
+      trend: cmpDuration,
     });
 
     // 1. (R) search investigations by seed searchId. Filter body copied from
@@ -71,13 +71,13 @@ export function cmtFlow(token, config) {
     const accidentIssueId = pickOrWarn(
       invRec,
       ['accidentIssueId', 'id'],
-      'CMT step 2 investigate/searchInvestigateById (accidentIssueId)'
+      'CMP step 2 investigate/searchInvestigateById (accidentIssueId)'
     );
 
     // 2. (R) investigation detail. accidentIssueId chained from step 1.
     if (!accidentIssueId) {
       console.warn(
-        '[CMT] step 1 searchInvestigate empty — skipping step 2 searchInvestigateById.'
+        '[CMP] step 1 searchInvestigate empty — skipping step 2 searchInvestigateById.'
       );
     } else {
       sleep(1);
@@ -154,13 +154,13 @@ export function cmtFlow(token, config) {
     const paymentId = pickOrWarn(
       payRec,
       ['paymentId', 'id'],
-      'CMT step 7 payment/searchPaymentDetailById (paymentId)'
+      'CMP step 7 payment/searchPaymentDetailById (paymentId)'
     );
 
     // 7. (R) payment detail. paymentId chained from step 6.
     if (!paymentId) {
       console.warn(
-        '[CMT] step 6 searchPayment empty — skipping step 7 searchPaymentDetailById.'
+        '[CMP] step 6 searchPayment empty — skipping step 7 searchPaymentDetailById.'
       );
     } else {
       sleep(1);

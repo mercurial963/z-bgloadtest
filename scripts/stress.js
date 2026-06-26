@@ -76,7 +76,7 @@ import { conG2Flow } from './scenarios/cong2.js';
 import { g0Flow } from './scenarios/g0.js';
 // G3 is parked pending acc-service routing on the gateway (g3.js stays on disk).
 import { finFlow } from './scenarios/fin.js';
-import { cmtFlow } from './scenarios/cmt.js';
+import { cmpFlow } from './scenarios/cmp.js';
 
 // ---------------------------------------------------------------------------
 // RATE MATH — weighting is on HTTP REQUESTS, not journeys.
@@ -94,7 +94,7 @@ import { cmtFlow } from './scenarios/cmt.js';
 //   REG    = 6   (step 1 + chained steps 2-6, all reads)
 //   CON-G2 = 16  (12 unconditional steps + 4 chained detail steps)
 //   FIN    = 14  (7 read-only steps x 2 branches)
-//   CMT    = 8   (read-only search-then-detail basket)
+//   CMP    = 8   (read-only search-then-detail basket)
 //
 // One journey rate per module PER STEP, derived from that step's total req/s:
 //   stepRate = Math.max(1, Math.round(stepRps * weight / requestsPerJourney))
@@ -106,10 +106,10 @@ import { cmtFlow } from './scenarios/cmt.js';
 //   REG    : 400 * 0.18 =  72.0 req/s ;  72.0 / 6  = 12.00 -> 12 journeys/s
 //   CON-G2 : 400 * 0.10 =  40.0 req/s ;  40.0 / 16 =  2.50 ->  3 journeys/s
 //   FIN    : 400 * 0.07 =  28.0 req/s ;  28.0 / 14 =  2.00 ->  2 journeys/s
-//   CMT    : 400 * 0.07 =  28.0 req/s ;  28.0 / 8  =  3.50 ->  4 journeys/s
-// CMT's journey rate is taken out of G0's slice below (G0 87 -> 83) so the basket
+//   CMP    : 400 * 0.07 =  28.0 req/s ;  28.0 / 8  =  3.50 ->  4 journeys/s
+// CMP's journey rate is taken out of G0's slice below (G0 87 -> 83) so the basket
 // total stays unchanged, exactly as load.js / soak.js do it. At the 400 ceiling
-// the per-journey floors are no longer skewing the mix (CON-G2/FIN/CMT all clear
+// the per-journey floors are no longer skewing the mix (CON-G2/FIN/CMP all clear
 // 1 j/s comfortably), so realized total tracks the weighted 400 closely.
 // ---------------------------------------------------------------------------
 
@@ -129,9 +129,9 @@ const COOLDOWN = __ENV.COOLDOWN || '3m';
 // Module weights (share of total HTTP requests) and real requests-per-journey —
 // identical to load.js / soak.js so a stress run is directly comparable. G3 is
 // parked pending acc-service routing; its 0.07 slice was dropped and the rest
-// renormalized to 1.0. CMT is wired at FIN's floor weight (0.07).
-const WEIGHTS = { g0: 0.65, reg: 0.18, cong2: 0.10, fin: 0.07, cmt: 0.07 };
-const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, fin: 14, cmt: 8 };
+// renormalized to 1.0. CMP is wired at FIN's floor weight (0.07).
+const WEIGHTS = { g0: 0.65, reg: 0.18, cong2: 0.10, fin: 0.07, cmp: 0.07 };
+const REQS_PER_JOURNEY = { g0: 3, reg: 6, cong2: 16, fin: 14, cmp: 8 };
 
 // journeyRate(module, totalRps): convert this module's request-share at the
 // given total req/s into a journey/s target rate, never rounding to 0.
@@ -140,7 +140,7 @@ function journeyRate(module, totalRps) {
   return Math.max(1, Math.round(requestShare / REQS_PER_JOURNEY[module]));
 }
 
-// Per-module journey rates at each of the three steps. G0 absorbs CMT's journey
+// Per-module journey rates at each of the three steps. G0 absorbs CMP's journey
 // rate at every step so the per-step basket total stays unchanged, exactly as
 // load.js / soak.js do it.
 const REG_S1 = journeyRate('reg', STEP1_RPS);
@@ -152,12 +152,12 @@ const CONG2_PEAK = journeyRate('cong2', RPS);
 const FIN_S1 = journeyRate('fin', STEP1_RPS);
 const FIN_S2 = journeyRate('fin', STEP2_RPS);
 const FIN_PEAK = journeyRate('fin', RPS);
-const CMT_S1 = journeyRate('cmt', STEP1_RPS);
-const CMT_S2 = journeyRate('cmt', STEP2_RPS);
-const CMT_PEAK = journeyRate('cmt', RPS);
-const G0_S1 = journeyRate('g0', STEP1_RPS) - CMT_S1;
-const G0_S2 = journeyRate('g0', STEP2_RPS) - CMT_S2;
-const G0_PEAK = journeyRate('g0', RPS) - CMT_PEAK;
+const CMP_S1 = journeyRate('cmp', STEP1_RPS);
+const CMP_S2 = journeyRate('cmp', STEP2_RPS);
+const CMP_PEAK = journeyRate('cmp', RPS);
+const G0_S1 = journeyRate('g0', STEP1_RPS) - CMP_S1;
+const G0_S2 = journeyRate('g0', STEP2_RPS) - CMP_S2;
+const G0_PEAK = journeyRate('g0', RPS) - CMP_PEAK;
 
 // ---------------------------------------------------------------------------
 // Scenario functions. Each reads its token off the setup() return passed in as
@@ -179,8 +179,8 @@ export function finScenario(data) {
   finFlow(data.finToken, config);
 }
 
-export function cmtScenario(data) {
-  cmtFlow(data.cmtToken, config);
+export function cmpScenario(data) {
+  cmpFlow(data.cmpToken, config);
 }
 
 // ---------------------------------------------------------------------------
@@ -274,23 +274,23 @@ export const options = {
         { target: 0, duration: COOLDOWN },
       ],
     },
-    cmt: {
+    cmp: {
       executor: 'ramping-arrival-rate',
-      exec: 'cmtScenario',
+      exec: 'cmpScenario',
       startRate: 0,
       timeUnit: '1s',
-      // CMT's read journey runs 8 search/detail steps with a sleep between
+      // CMP's read journey runs 8 search/detail steps with a sleep between
       // most, so each iteration runs several seconds. Even at the floored
       // journey rate many iterations overlap, so it needs a FIN-class ceiling.
       preAllocatedVUs: 30,
       maxVUs: 150,
       stages: [
-        { target: CMT_S1, duration: RAMP },
-        { target: CMT_S1, duration: STEP_HOLD },
-        { target: CMT_S2, duration: RAMP },
-        { target: CMT_S2, duration: STEP_HOLD },
-        { target: CMT_PEAK, duration: RAMP },
-        { target: CMT_PEAK, duration: PEAK_HOLD },
+        { target: CMP_S1, duration: RAMP },
+        { target: CMP_S1, duration: STEP_HOLD },
+        { target: CMP_S2, duration: RAMP },
+        { target: CMP_S2, duration: STEP_HOLD },
+        { target: CMP_PEAK, duration: RAMP },
+        { target: CMP_PEAK, duration: PEAK_HOLD },
         { target: 0, duration: COOLDOWN },
       ],
     },
@@ -311,13 +311,13 @@ export const options = {
     'http_req_duration{name:auth:REG}': [{ threshold: 'p(95)<2000', abortOnFail: false }],
     'http_req_duration{name:auth:CON-G2}': [{ threshold: 'p(95)<2000', abortOnFail: false }],
     'http_req_duration{name:auth:FIN}': [{ threshold: 'p(95)<2000', abortOnFail: false }],
-    'http_req_duration{name:auth:CMT}': [{ threshold: 'p(95)<2000', abortOnFail: false }],
+    'http_req_duration{name:auth:CMP}': [{ threshold: 'p(95)<2000', abortOnFail: false }],
     // Per-module visibility (same per-domain metrics as load.js / soak.js).
     reg_req_duration: [{ threshold: 'p(95)<3000', abortOnFail: false }],
     cong2_req_duration: [{ threshold: 'p(95)<3000', abortOnFail: false }],
     g0_req_duration: [{ threshold: 'p(95)<3000', abortOnFail: false }],
     fin_req_duration: [{ threshold: 'p(95)<3000', abortOnFail: false }],
-    cmt_req_duration: [{ threshold: 'p(95)<3000', abortOnFail: false }],
+    cmp_req_duration: [{ threshold: 'p(95)<3000', abortOnFail: false }],
   },
 };
 
@@ -330,6 +330,6 @@ export function setup() {
   const regToken = authenticate(config.REG_USER, config.REG_PASS, 'REG', config);
   const conG2Token = authenticate(config.CONG2_USER, config.CONG2_PASS, 'CON-G2', config);
   const finToken = authenticate(config.FIN_USER, config.FIN_PASS, 'FIN', config);
-  const cmtToken = authenticate(config.CMT_USER, config.CMT_PASS, 'CMT', config);
-  return { regToken, conG2Token, finToken, cmtToken };
+  const cmpToken = authenticate(config.CMP_USER, config.CMP_PASS, 'CMP', config);
+  return { regToken, conG2Token, finToken, cmpToken };
 }
