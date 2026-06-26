@@ -1,0 +1,39 @@
+TOKEN=$(curl -sk -X POST \
+  "https://wcfapi.sso.go.th/auth/user/token?grant_type=password&username=xxxx&password=xxxx" \
+  --resolve "wcf.sso.go.th:443:172.20.13.33" \
+  --resolve "wcfapi.sso.go.th:443:172.20.13.33" \
+  --noproxy "*" \
+  -H "accept: */*" \
+  -H "authorization: Basic bG9hZC10ZXN0OkJHRjgwamdyWGE=" \
+  -H "user-agent: httpyac" \
+  | jq -r '.access_token')
+echo "$TOKEN"
+
+
+curl -sk -X POST "https://wcfapi.sso.go.th/cmp/payment/searchRemainPayment" \
+  --resolve "wcfapi.sso.go.th:443:172.20.13.33" \
+  --noproxy "*" \
+  -H "accept: */*" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "user-agent: httpyac" \
+  -d '{
+  "accidentissueCode": "12006900158",
+  "treatmentCode": "01",
+  "payToCode": "1",
+  "beneficiaryId": null,
+  "endDate": null
+}'
+
+curl -sk -X POST "https://wcfapi.sso.go.th/cmp/payment/searchPayment" \
+  --resolve "wcfapi.sso.go.th:443:172.20.13.33" \
+  --noproxy "*" \
+  -H "accept: */*" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "user-agent: httpyac" \
+  -d '{
+  "operation": "OR",
+  "pagination": { "pageNumber": 0, "pageSize": 10, "orders": [{ "direction": "DESC", "property": "string" }] },
+  "condition": { "searchFrom": 1, "searchId": "12006900158", "isMylist": false }
+}'
