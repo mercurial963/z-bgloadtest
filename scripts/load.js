@@ -11,13 +11,13 @@
  *               separate from smoke.js (which stays a 1-2 VU functional check).
  *               Do NOT confuse the two; this file never overwrites smoke.js.
  *
- * Profile     : STEPPED two-tier load in ONE continuous run (~51 min). Each
+ * Profile     : STEPPED two-tier load in ONE continuous run (~37.5 min). Each
  *               scenario walks the same five stages:
  *                 1. ramp 0 -> warm-up rate over 30s
- *                 2. hold warm-up rate for WARMUP_HOLD (default 15m)
+ *                 2. hold warm-up rate for WARMUP_HOLD (default 3m)
  *                 3. ramp warm-up -> load rate over 1m
  *                 4. hold load rate for LOAD_HOLD (default 30m)
- *                 5. ramp -> 0 over COOLDOWN (default 5m, cool down)
+ *                 5. ramp -> 0 over COOLDOWN (default 3m, cool down)
  *               The warm-up tier offers LOW_RPS total HTTP req/s; the load tier
  *               offers HIGH_RPS. Both tiers and all hold durations are env
  *               tunable, so the one file covers validation, go-live, and soak:
@@ -110,7 +110,7 @@ const HIGH_RPS = Number(__ENV.HIGH_RPS) || 150;  // load total HTTP req/s
 // Hold durations (env tunable). The two ramps (30s up, 1m between tiers) stay
 // hardcoded; cool-down is COOLDOWN.
 const WARMUP_HOLD = __ENV.WARMUP_HOLD || '3m';
-const LOAD_HOLD = __ENV.LOAD_HOLD || '5m';
+const LOAD_HOLD = __ENV.LOAD_HOLD || '30m';
 const COOLDOWN = __ENV.COOLDOWN || '3m';
 
 // Module weights (share of total HTTP requests) and real requests-per-journey.
