@@ -174,13 +174,27 @@ export function cmtFlow(token, config) {
     // 8. (R) search remaining payment. Filter body copied from APICMP04007.
     //    This is a calculate-preview read; it computes remaining amounts off
     //    the filter and does not persist anything.
-    sleep(1);
-    postStep(8, '/cmp/payment/searchRemainPayment', {
-      accidentissueCode: '12006900158',
-      treatmentCode: '01',
-      payToCode: '1',
-      beneficiaryId: null,
-      endDate: null,
-    });
+    //
+    // ===== PARKED 2026-06-26 (no valid seed data) =====================
+    // Step 8 POST /cmp/payment/searchRemainPayment is disabled. The endpoint
+    // works and authenticates fine (tested with loadtest.g4), but the
+    // hardcoded seed accidentissueCode "12006900158" has no diagnosis-payment
+    // record behind it in this UAT environment. Unlike searchPayment (200 +
+    // empty list for the same code), searchRemainPayment treats not-found as an
+    // error: it returns {"message":"ไม่พบข้อมูลวินิจฉัยเพื่อสั่งจ่าย","content":null}
+    // with a non-2xx status. Left in the run, every call counts as an error and
+    // eats the 0.5% error budget, poisoning results.
+    // TO RE-ENABLE: uncomment the block below once the stakeholder provides a
+    // valid accidentissueCode that has a diagnosis-payment record.
+    // -----------------------------------------------------------------
+    // sleep(1);
+    // postStep(8, '/cmp/payment/searchRemainPayment', {
+    //   accidentissueCode: '12006900158',
+    //   treatmentCode: '01',
+    //   payToCode: '1',
+    //   beneficiaryId: null,
+    //   endDate: null,
+    // });
+    // =================================================================
   });
 }
