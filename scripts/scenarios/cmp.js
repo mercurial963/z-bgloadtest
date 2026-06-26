@@ -184,27 +184,33 @@ export function cmpFlow(token, config) {
     //    This is a calculate-preview read; it computes remaining amounts off
     //    the filter and does not persist anything.
     //
-    // ===== RE-ENABLED 2026-06-26 (was PARKED — now resolved) ==========
-    // Step 8 was previously parked: the hardcoded accidentissueCode
-    // "12006900158" had no diagnosis-payment record in UAT, so the endpoint
-    // returned {"message":"ไม่พบข้อมูลวินิจฉัยเพื่อสั่งจ่าย","content":null} with a
-    // non-2xx status, counting as an error against the 0.5% budget. The
-    // stakeholder has now provided 380 valid accidentIssueCodes (see
-    // ../data/cmp-accident-codes.json). We round-robin across them by the
-    // scenario iteration counter so load spreads over many real records instead
-    // of hammering one. (Round-robin is deterministic and even; swap to
-    // Math.random() for a uniform-random pick if preferred.)
+    // ===== RE-PARKED 2026-06-26 ======================================
+    // Step 8 was re-enabled earlier today wired to round-robin across the
+    // 380-code stakeholder seed (../data/cmp-accident-codes.json). Pao
+    // re-tested it in UAT with that seed and it STILL returns the
+    // not-found/error response ({"message":"ไม่พบข้อมูลวินิจฉัยเพื่อสั่งจ่าย",
+    // "content":null}, non-2xx). So the root cause is NOT a missing seed —
+    // it is likely the endpoint itself or how the accident code must be
+    // paired with treatmentCode/payToCode in UAT. Parked again so it does
+    // not inflate the error rate against the 0.5% budget.
+    //
+    // KEPT (do not remove): the cmp-accident-codes.json seed file, the
+    // SharedArray import + cmpAccidentCodes loader, and the cmpAccidentCode
+    // selection line below — all retained so re-enabling is trivial once the
+    // real issue is sorted: just uncomment the postStep(8, ...) + sleep.
     // -----------------------------------------------------------------
+    // Retained for the parked step 8 (its only consumer is the commented
+    // postStep below).
     const cmpAccidentCode =
       cmpAccidentCodes[exec.scenario.iterationInTest % cmpAccidentCodes.length];
-    sleep(1);
-    postStep(8, '/cmp/payment/searchRemainPayment', {
-      accidentissueCode: cmpAccidentCode,
-      treatmentCode: '01',
-      payToCode: '1',
-      beneficiaryId: null,
-      endDate: null,
-    });
+    // sleep(1);
+    // postStep(8, '/cmp/payment/searchRemainPayment', {
+    //   accidentissueCode: cmpAccidentCode,
+    //   treatmentCode: '01',
+    //   payToCode: '1',
+    //   beneficiaryId: null,
+    //   endDate: null,
+    // });
     // =================================================================
   });
 }
