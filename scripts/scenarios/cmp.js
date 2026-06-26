@@ -36,10 +36,19 @@
 
 import { sleep, group } from 'k6';
 import { Trend } from 'k6/metrics';
+import { SharedArray } from 'k6/data';
+import exec from 'k6/execution';
 import { firstRecord, pick, pickOrWarn, makeSteps } from '../lib/http.js';
 
 // Per-domain latency metric (so CMP is visible separately from the others).
 const cmpDuration = new Trend('cmp_req_duration', true);
+
+// Valid accidentIssueCode seed for step 8 searchRemainPayment. Loaded ONCE per
+// VU-shared (memory-efficient) from the stakeholder-provided list of real
+// diagnosis-payment records. See params.md "CMP searchRemainPayment".
+const cmpAccidentCodes = new SharedArray('cmpAccidentCodes', () =>
+  JSON.parse(open('../data/cmp-accident-codes.json'))
+);
 
 export function cmpFlow(token, config) {
   const HOST = config.HOST;
@@ -175,26 +184,27 @@ export function cmpFlow(token, config) {
     //    This is a calculate-preview read; it computes remaining amounts off
     //    the filter and does not persist anything.
     //
-    // ===== PARKED 2026-06-26 (no valid seed data) =====================
-    // Step 8 POST /cmp/payment/searchRemainPayment is disabled. The endpoint
-    // works and authenticates fine (tested with loadtest.g4), but the
-    // hardcoded seed accidentissueCode "12006900158" has no diagnosis-payment
-    // record behind it in this UAT environment. Unlike searchPayment (200 +
-    // empty list for the same code), searchRemainPayment treats not-found as an
-    // error: it returns {"message":"ไม่พบข้อมูลวินิจฉัยเพื่อสั่งจ่าย","content":null}
-    // with a non-2xx status. Left in the run, every call counts as an error and
-    // eats the 0.5% error budget, poisoning results.
-    // TO RE-ENABLE: uncomment the block below once the stakeholder provides a
-    // valid accidentissueCode that has a diagnosis-payment record.
+    // ===== RE-ENABLED 2026-06-26 (was PARKED — now resolved) ==========
+    // Step 8 was previously parked: the hardcoded accidentissueCode
+    // "12006900158" had no diagnosis-payment record in UAT, so the endpoint
+    // returned {"message":"ไม่พบข้อมูลวินิจฉัยเพื่อสั่งจ่าย","content":null} with a
+    // non-2xx status, counting as an error against the 0.5% budget. The
+    // stakeholder has now provided 380 valid accidentIssueCodes (see
+    // ../data/cmp-accident-codes.json). We round-robin across them by the
+    // scenario iteration counter so load spreads over many real records instead
+    // of hammering one. (Round-robin is deterministic and even; swap to
+    // Math.random() for a uniform-random pick if preferred.)
     // -----------------------------------------------------------------
-    // sleep(1);
-    // postStep(8, '/cmp/payment/searchRemainPayment', {
-    //   accidentissueCode: '12006900158',
-    //   treatmentCode: '01',
-    //   payToCode: '1',
-    //   beneficiaryId: null,
-    //   endDate: null,
-    // });
+    const cmpAccidentCode =
+      cmpAccidentCodes[exec.scenario.iterationInTest % cmpAccidentCodes.length];
+    sleep(1);
+    postStep(8, '/cmp/payment/searchRemainPayment', {
+      accidentissueCode: cmpAccidentCode,
+      treatmentCode: '01',
+      payToCode: '1',
+      beneficiaryId: null,
+      endDate: null,
+    });
     // =================================================================
   });
 }
