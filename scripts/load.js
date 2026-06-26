@@ -117,8 +117,13 @@ const COOLDOWN = __ENV.COOLDOWN || '3m';
 // G3 is parked pending acc-service routing on the gateway; its 0.07 slice was
 // dropped and the remaining four modules renormalized to sum to 1.0, keeping g0
 // dominant. FIN stays read-only (7 read steps x 2 branches = 14 reqs).
-// CMP is a read-only search-then-detail basket (7 active read steps in cmp.js;
-// step 8 searchRemainPayment is parked/commented out and does not run), wired
+// CMP is a read-only search-then-detail basket. 7 steps are coded-active in
+// cmp.js, but step 6 (searchPayment, hardcoded searchId) returns empty in UAT,
+// so step 7 (searchPaymentDetailById) skips at runtime via its guarded return
+// -> ~6 requests actually fire per journey in UAT. Step 8 searchRemainPayment
+// is parked/commented out and does not run. The REQS_PER_JOURNEY value below is
+// left at 7 (cosmetic only): CMP is hard-floored into G0's slice, so throughput
+// is unchanged whether the value is 6 or 7. Wired
 // at FIN's floor weight (0.07). At both tiers its share floors to 1 journey/s,
 // exactly like FIN (100*0.07/7 = 1.0 -> 1 ; 150*0.07/7 = 1.5 -> 2). CMP's
 // 1 journey/s is taken out of G0's slice below so the per-tier basket total is
