@@ -1,16 +1,6 @@
-/*
- * http.js — shared response-probing + per-domain request helpers.
- * =========================================================================
- * The collections ship no saved responses, so we probe the common shapes
- * defensively (firstRecord / pick). makeSteps() builds the per-domain
- * postStep/getStep check() wrappers bound to a token + the domain's Trend.
- * =========================================================================
- */
-
 import http from 'k6/http';
 import { check } from 'k6';
 
-// Pull the first usable record out of a list response, probing common shapes.
 export function firstRecord(body) {
   if (!body) return null;
   if (Array.isArray(body) && body.length) return body[0];
@@ -24,8 +14,6 @@ export function firstRecord(body) {
   return null;
 }
 
-// Pull the first present value among candidate keys off a record (defensive:
-// the collections ship no saved responses, so we probe the common field names).
 export function pick(record, keys) {
   if (!record) return null;
   for (const k of keys) {
@@ -36,8 +24,6 @@ export function pick(record, keys) {
   return null;
 }
 
-// Stringify a record for diagnostics, truncating if it's huge so a single
-// fat response can't flood the console.
 function truncatedJson(record, max = 2000) {
   let s;
   try {
@@ -50,12 +36,6 @@ function truncatedJson(record, max = 2000) {
   return s;
 }
 
-// pick() with a self-diagnosing miss path. On success it behaves EXACTLY like
-// pick() (returns the first present candidate value). On a miss (no candidate
-// found, or the record itself is null/empty), it logs a warning that names the
-// candidate fields it tried AND the actual Object.keys() of the record it got
-// (plus the raw record, truncated), so the operator can read off the real field
-// name to add to the candidate list. `label` is a human-readable step tag.
 export function pickOrWarn(record, candidates, label) {
   const value = pick(record, candidates);
   if (value !== null) return value;
@@ -77,10 +57,6 @@ export function pickOrWarn(record, candidates, label) {
   return null;
 }
 
-// Build per-domain postStep/getStep helpers bound to a token, a domain label
-// prefix (e.g. 'CON-G2'), a tag prefix (e.g. 'CON-G2'), the host, and the
-// domain Trend. Keeps the long ordered walks readable while preserving the
-// exact tags, checks, and trend.add() behavior of the monolith.
 export function makeSteps({ token, label, tagPrefix, host, trend }) {
   const headers = {
     Authorization: `Bearer ${token}`,
@@ -90,13 +66,6 @@ export function makeSteps({ token, label, tagPrefix, host, trend }) {
     headers: { Authorization: `Bearer ${token}` },
   };
 
-  // Detect a request that failed at the transport layer (DNS, connection
-  // refused, TLS handshake, timeout). Such a response has res.error set,
-  // status 0, and a null body — calling r.json() on it throws an opaque
-  // GoError that aborts the whole iteration. Mirror auth.js: log a readable
-  // warning, register a FAILED check so it surfaces in the k6 summary, and
-  // return WITHOUT touching the body so the iteration continues. Returns true
-  // when the response is a transport failure (caller should bail early).
   function guardFailed(res, stepLabel, url) {
     if (res.error_code || res.error || res.status === 0 || res.body === null) {
       const reason = res.error || `HTTP ${res.status}` || 'unknown error';
@@ -112,22 +81,12 @@ export function makeSteps({ token, label, tagPrefix, host, trend }) {
     return false;
   }
 
-  // First ~120 chars of a body, for diagnostics. Bodies can be huge HTML error
-  // pages, so we truncate hard and flatten newlines so the warning stays on one
-  // readable line.
   function bodyHead(res, max = 120) {
     const b = res && res.body != null ? String(res.body) : '';
     const flat = b.replace(/\s+/g, ' ').trim();
     return flat.length > max ? `${flat.slice(0, max)}…` : flat;
   }
 
-  // Defensive JSON read. A non-2xx response (404, 500, an HTML error page) or a
-  // 2xx with a non-JSON body (e.g. a '%'-prefixed body) must NOT call r.json()
-  // and abort the iteration with a GoError. Guard on status first, then wrap the
-  // parse: on either failure, warn with label + step + status + truncated body
-  // and return null so firstRecord/pick/pickOrWarn downstream warn-skip the
-  // chained step instead of crashing. Returns the parsed body on the happy path
-  // (2xx + valid JSON), exactly as r.json() would have.
   function safeJson(res, stepLabel) {
     if (res.status < 200 || res.status >= 300) {
       console.warn(
@@ -156,9 +115,6 @@ export function makeSteps({ token, label, tagPrefix, host, trend }) {
     if (guardFailed(res, `${n} ${path}`, `${host}${path}`)) {
       return res;
     }
-    // Parse defensively ONCE (non-2xx or non-JSON body -> warn + null, never a
-    // GoError), then assert on the already-parsed value so the check never
-    // re-parses and re-throws.
     const parsed = safeJson(res, `${n} ${path}`);
     check(res, {
       [`[${label}] ${n} ${path} status 200`]: (r) => r.status === 200,
@@ -176,9 +132,6 @@ export function makeSteps({ token, label, tagPrefix, host, trend }) {
     if (guardFailed(res, `${n} ${stepLabel}`, `${host}${urlSuffix}`)) {
       return res;
     }
-    // Parse defensively ONCE (non-2xx or non-JSON body -> warn + null, never a
-    // GoError), then assert on the already-parsed value so the check never
-    // re-parses and re-throws.
     const parsed = safeJson(res, `${n} ${stepLabel}`);
     check(res, {
       [`[${label}] ${n} ${stepLabel} status 200`]: (r) => r.status === 200,

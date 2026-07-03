@@ -1,24 +1,7 @@
-/*
- * mock-server.mjs — throwaway offline mock for the WCF k6 smoke.
- * =========================================================================
- * Built-in node:http only, no npm deps. Localhost only. Returns representative
- * JSON whose list responses carry records with the field names the chaining
- * probes for (uuid / companyUuid / accountNo / branchNo / payInstalmentRequestId
- * / hireReportId / companyAuditId / invoiceId, etc.).
- *
- * It logs every received path in order so we can confirm step coverage and that
- * chained ids round-trip (the {id} the mock handed out comes back in the URL).
- *
- * EMPTY-LIST PROOF: invoice/askContribute/list (CON-G2 step 18) deliberately
- * returns an empty content[] so step 19 (askContribute/select) must SKIP. That
- * proves the console.warn skip path fires against a well-formed-but-empty list.
- * =========================================================================
- */
 import http from 'node:http';
 
 const PORT = process.env.MOCK_PORT ? Number(process.env.MOCK_PORT) : 8787;
 
-// ids the mock hands out in list responses; we assert they come back in detail URLs.
 const IDS = {
   uuid: 'company-uuid-0001',
   accountNo: '8400118685',
@@ -38,7 +21,6 @@ function record(method, pathname) {
 const list = (records) => ({ content: records, totalElements: records.length });
 
 function route(method, pathname) {
-  // ---- AUTH ----
   if (method === 'POST' && pathname === '/auth/user/token') {
     return {
       access_token: 'mock-token-123',
@@ -48,7 +30,6 @@ function route(method, pathname) {
     };
   }
 
-  // ---- REG ----
   if (method === 'POST' && pathname === '/reg/company/list') {
     return list([
       {
@@ -76,9 +57,7 @@ function route(method, pathname) {
     return { accountNo: IDS.accountNo, branchNo: '000001', name: 'MOCK BRANCH' };
   }
 
-  // ---- CON-G2 ----
   if (method === 'POST' && pathname === '/coninvoice/pay-instalment-requests/list') {
-    // Both tab1 and tab2 use this path; hand out a record so steps 2 & 4 chain.
     return list([
       {
         id: IDS.payInstalmentId,
@@ -116,14 +95,12 @@ function route(method, pathname) {
     return { canInvoice: true, accountNo: IDS.accountNo };
   }
   if (method === 'POST' && pathname === '/coninvoice/invoice/askContribute/list') {
-    // EMPTY-LIST PROOF: well-formed but empty -> step 19 must skip.
     return list([]);
   }
   if (method === 'GET' && pathname === '/coninvoice/invoice/askContribute/select') {
     return { invoiceId: 'should-not-be-hit', note: 'step19 should have skipped' };
   }
 
-  // ---- G0 (home-page burst: independent reference reads, no chaining) ----
   if (method === 'GET' && pathname === '/ums/users/profile') {
     return { userId: 'mock-user-1', username: 'REG003001', displayName: 'MOCK USER' };
   }
@@ -134,13 +111,12 @@ function route(method, pathname) {
     return list([{ pageCode: 'HOME', canView: true }, { pageCode: 'REG', canView: true }]);
   }
 
-  return undefined; // 404
+  return undefined;
 }
 
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, `http://${req.headers.host}`);
   record(req.method, u.pathname);
-  // drain body
   req.on('data', () => {});
   req.on('end', () => {
     const payload = route(req.method, u.pathname);
@@ -154,7 +130,6 @@ const server = http.createServer((req, res) => {
   });
 });
 
-// On SIGTERM/SIGINT dump the ordered request log so the harness can capture it.
 function dumpAndExit() {
   console.log('[mock] --- ORDERED REQUEST LOG ---');
   log.forEach((l, i) => console.log(`[mock] ${(i + 1).toString().padStart(2, '0')}  ${l}`));

@@ -1,15 +1,5 @@
-/*
- * extraction.test.mjs — standalone Node harness for the pure ID-chaining helpers.
- * =========================================================================
- * NOTE: firstRecord() and pick() are COPIED VERBATIM from ../lib/http.js (lines
- * 13-37) rather than imported, because http.js does `import http from 'k6/http'`
- * at the top, which Node cannot resolve. The two functions below are pure JS and
- * have no k6 dependency — they are an exact copy of the source under test.
- * =========================================================================
- */
 import assert from 'node:assert/strict';
 
-// ---- COPIED VERBATIM FROM lib/http.js ----
 function firstRecord(body) {
   if (!body) return null;
   if (Array.isArray(body) && body.length) return body[0];
@@ -32,7 +22,6 @@ function pick(record, keys) {
   }
   return null;
 }
-// ---- END COPY ----
 
 let pass = 0;
 let fail = 0;
